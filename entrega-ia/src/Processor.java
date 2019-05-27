@@ -30,7 +30,8 @@ public class Processor {
 
 	public static void main(String[] args) {
 		Processor algo = new Processor("src/CTR_TRAIN.txt");
-		algo.evalDB("src/CTR_TRAIN.txt");
+		//algo.evalDB("src/CTR_TRAIN.txt");
+		algo.evalDB("src/CYBERTROLL_TEST_ALEATORIZADO_SUBIR_NOTA_Hoja1.csv");
 	}
 
 	public Processor(String filename) {
@@ -74,10 +75,12 @@ public class Processor {
 					troll.write(valores[0] + "\n");
 					for (String linea : valores[0].split("\\s+")) {
 						linea = refactorWord(linea);
-						if (excludingConditions(linea)) {
-							continue;
+						for(String palabra : linea.split("<>")) {
+							if (excludingConditions(palabra)) {
+								continue;
+							}
+							addToHash(hashmaptroll, palabra);
 						}
-						addToHash(hashmaptroll, linea);
 					}
 				} else {
 					// System.out.println(valores[1] + " : not_troll");
@@ -85,10 +88,12 @@ public class Processor {
 					notroll.write(valores[0] + "\n");
 					for (String linea : valores[0].split("\\s+")) {
 						linea = refactorWord(linea);
-						if (excludingConditions(linea)) {
-							continue;
+						for(String palabra : linea.split("<>")) {
+							if (excludingConditions(palabra)) {
+								continue;
+							}
+							addToHash(hashmapnotroll, palabra);
 						}
-						addToHash(hashmapnotroll, linea);
 					}
 				}
 				corpus.write(valores[0] + "\n");
@@ -143,7 +148,7 @@ public class Processor {
 				notroll.close();
 				dict.close();
 				corpus.close();
-				System.out.println("Done.\n");
+				System.out.println();
 			} catch (IOException e) {
 			}
 		}
@@ -168,34 +173,29 @@ public class Processor {
 				}
 
 				String[] valores = text.split("\"\\s*,\\s*");
-				if (valores.length == 1)
+				
+				if (valores.length == 1 || (valores[1] = valores[1].replaceAll("\"", "")).equalsIgnoreCase("empty"))
 					continue;
 				valores[0] = refactorPhrase(valores[0]);
-				// System.out.println(valores[1]);
+				//System.out.println(valores[1]);
 				
 				if(calcPropPhrase(hashmaptroll, acc_troll, valores[0]) < calcPropPhrase(hashmapnotroll, acc_notroll, valores[0])) {
 				//if(calcPropPhrase(hashmaptroll, acc_troll, hashmapnotroll, acc_notroll, valores[0]) <= 0) {
 					if("not_troll".equalsIgnoreCase(valores[1])){
 						notrollT++;
 					}else {
-						notrollF++;
+						trollF++;
 					}
 				}else {
 					if("troll".equalsIgnoreCase(valores[1])){
 						trollT++;
 					}else {
-						trollF++;
+						notrollF++;
 					}
 				}
-			}
+			}			
 			
-			System.out.println("troll\tnotroll");
-			System.out.println(trollT+"\t"+trollF+"\ttroll");
-			System.out.println(notrollF+"\t"+notrollT+"\tnotroll");
-			System.out.println();
-			System.out.println("troll: " +((double)trollT/(trollT+trollF)*100) + "%");
-			System.out.println("notroll: " +((double)notrollT/(notrollT+notrollF)*100) + "%");
-			System.out.println("Total: " +((double)(notrollT+trollT)/(notrollT+notrollF+trollT+trollF)*100) + "%");
+			printProb(trollT, trollF, notrollT, notrollF);
 			
 		} catch (FileNotFoundException e) {
 			System.out.println(System.getProperty("user.dir"));
@@ -207,68 +207,67 @@ public class Processor {
 				if (reader != null) {
 					reader.close();
 				}
-				System.out.println("Done.");
+				System.out.println();
 			} catch (IOException e) {
 			}
 		}
-	}
-
-	private int calcPropPhrase(HashMap<String, Double> map, long acumulado, HashMap<String, Double> map2, long acumulado2, String phrase) {
-		int acc = 0;
-		for (String word : phrase.split("\\s+")) {
-			word = refactorWord(word);
-			acc += calcProbWord(map, acumulado, word) > calcProbWord(map2, acumulado2, word) ? 1 : -1;
-		}
-		return acc;
 	}
 
 	private Double calcPropPhrase(HashMap<String, Double> map, long acumulado, String phrase) {
 		Double acc = 0d;
 		for (String word : phrase.split("\\s+")) {
 			word = refactorWord(word);
-			acc += calcProbWord(map, acumulado, word);
+			for(String pal : word.split("<>")) {
+				acc += calcProbWord(map, acumulado, pal);
+			}			
 		}
 		return acc;
 	}
 
 	private Double calcProbWord(HashMap<String, Double> map, long acumulado, String word) {
-		return Math.log(((map.get(word) == null ? 1 : map.get(word)) + 1) / (acumulado + map.size() + 1));
+		return Math.log(((map.get(word) == null ? 0 : map.get(word)) + 1) / (acumulado + map.size() + 1));
 	}
 
 	private boolean excludingConditions(String word) {
 		boolean out = false;
-		if (word.startsWith("@")
-				//|| word.length() <= 1
-				|| word.startsWith("http")) {
-			//System.out.println(word);
+		if (false
+				//||word.startsWith("http")
+				|| (word.length() <= 1 && word.equalsIgnoreCase("o"))
+				//|| word.startsWith("@")
+				){
 			out = true;
 		}
 		return out;
 	}
 	
-	private String refactorPhrase(String phrase) {
-		return phrase.substring(1, phrase.length());//.toLowerCase()
+	private String refactorWord(String word) {
+		return word
+				.replaceAll("[\\.()-]", "")
+				.replaceAll("&#\\d+;", "<>color<>")
+				.replaceAll("&amp;|&lt;|&gt;|&quot;", "")
+				.replaceAll("\\B\\d+", "<>leet<>")
+				.replaceAll("\\b\\d+", "<>number<>")
+				.replaceAll("(!|\\?)+", "<>punctuation<>")
+				.replaceAll("@\\w+", "<>mention<>")
+				.replaceAll("http.+", "<>link<>")
+				.replaceAll("&apos;", "'")
+				;
 	}
 	
-	private String refactorWord(String word) {
-		return word.replaceAll("[!?\\.()]|&lt;|&gt;|&quot;|&#\\d+;|\\b\\d+\\b", "")
-				//.replaceAll("&amp;", "")
-				.replaceAll("&apos;", "'");
+	private String refactorPhrase(String phrase) {
+		return phrase.substring(1, phrase.length());//.toLowerCase()
 	}
 
 	private void writeFile(FileWriter file, HashMap<String, Double> values, long frases, long acumulado) {
 		// iterate through total hashmap onto file
 		Iterator<?> it = ((HashMap<String, Double>) values.clone()).entrySet().iterator();
 		try {
-			file.append("Numero de documentos del corpus :" + frases + "\n" + "N�mero de palabras del corpus:"
-					+ acumulado + "\n");
+			file.append("Numero de documentos del corpus :" + frases + "\n" + "N�mero de palabras del corpus:" + acumulado + "\n");
 
 			while (it.hasNext()) {
 				Map.Entry<String, Double> pair = (Map.Entry<String, Double>) it.next();
 				file.write("Palabra:" + pair.getKey() + "\tFrec:" + pair.getValue() + "\tLogProb:"
 						+ Math.log((pair.getValue() + 1) / (acc_notroll + hashmaptotal.size() + 1)) + "\n");
-				// System.out.println((pair.getValue()+1) / (acumulado+hashmaptotal.size()+1)+"
-				// = "+(pair.getValue()+1)+"/"+acumulado+"+"+hashmaptotal.size()+1);
 				it.remove(); // avoids a ConcurrentModificationException
 			}
 		} catch (IOException e) {
@@ -283,5 +282,15 @@ public class Processor {
 		} else {
 			map.put(value, map.get(value) + 1);
 		}
+	}
+	
+	private void printProb(long trollT, long trollF, long notrollT, long notrollF) {
+		System.out.println("troll\tnotroll\t<- classified as");
+		System.out.println(trollT+"\t"+trollF+"\ttroll");
+		System.out.println(notrollF+"\t"+notrollT+"\tnotroll");
+		System.out.println();
+		System.out.println("troll: " +((double)trollT/(trollT+trollF)*100) + "%");
+		System.out.println("notroll: " +((double)notrollT/(notrollT+notrollF)*100) + "%");
+		System.out.println("Total: " +((double)(notrollT+trollT)/(notrollT+notrollF+trollT+trollF)*100) + "%");		
 	}
 }
